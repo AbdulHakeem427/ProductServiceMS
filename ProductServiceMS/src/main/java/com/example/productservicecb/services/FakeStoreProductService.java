@@ -1,0 +1,124 @@
+package com.example.productservicecb.services;
+
+import com.example.productservicecb.dto.ErrorResponseDTO;
+import com.example.productservicecb.dto.FakeStorePOSTResponseDTO;
+import com.example.productservicecb.dto.FakeStoreRequestDTO;
+import com.example.productservicecb.dto.FakeStoreResponseDTO;
+import com.example.productservicecb.exceptions.DBNotFoundException;
+import com.example.productservicecb.exceptions.DBTimeoutException;
+import com.example.productservicecb.exceptions.ProductNotFoundException;
+import com.example.productservicecb.models.Category;
+import com.example.productservicecb.models.Product;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Primary;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
+@Qualifier("FakeStoreProductService")
+public class FakeStoreProductService implements ProductService{
+
+    // It has to hit the APIs of Fakestoreserver; basically, this class is going to be a client of another server.
+    @Autowired
+    RestTemplate restTemplate;
+    // we use RestTemplate to call 3rd party APIs.
+
+    @Override
+    public Product getSingleProduct(String productId) throws ProductNotFoundException, DBNotFoundException, DBTimeoutException {
+        FakeStoreResponseDTO response = restTemplate.getForObject(
+                "https://fakestoreapi.com/products/" + productId,
+                FakeStoreResponseDTO.class
+        );
+        if(response == null){
+            throw new ProductNotFoundException("product with id " + productId + " not found");
+        }
+        //ConnectToDB();      // This will stop the execution when given correct input and return exception.
+        //executeSQLQuery();  // This will stop the execution when given correct input and return exception.
+        //converting the third-party response to my models and then work on them.
+        Product product = response.toProduct();
+        return product;
+    }
+
+    private void ConnectToDB() throws DBNotFoundException {
+        throw new DBNotFoundException("db not found ");
+    }
+    private void executeSQLQuery() throws DBTimeoutException{
+        throw new DBTimeoutException("db timeout trying to execute query ");
+    }
+
+    @Override
+    public List<Product> getAllProducts() {
+        FakeStoreResponseDTO[] responseArray = restTemplate.getForObject(
+                "https://fakestoreapi.com/products",
+                FakeStoreResponseDTO[].class
+        );
+        List<Product> productsList = new ArrayList<>();
+        for(FakeStoreResponseDTO response : responseArray){
+            Product product = response.toProduct();
+            productsList.add(product);
+        }
+        return productsList;
+    }
+
+    @Override
+    public List<Product> getProductsByCategoryName(String categoryName) throws ProductNotFoundException{
+        FakeStoreResponseDTO[] responseDTO = restTemplate.getForObject(
+                "https://fakestoreapi.com/products/category/" + categoryName,
+                FakeStoreResponseDTO[].class
+        );
+        if(responseDTO == null){
+            throw new ProductNotFoundException("product with id " + categoryName + " not found");
+        }
+        List<Product> productsList = new ArrayList<>();
+        for(FakeStoreResponseDTO response : responseDTO){
+            Product product = response.toProduct();
+            productsList.add(product);
+        }
+        return productsList;
+    }
+
+
+    @Override
+    public List<Product> searchProducts(String searchText) {
+        List<Product> productsList = getAllProducts();
+        List<Product> matchedProducts = new ArrayList<>();
+        for(Product product : productsList){
+            if(product.getName().toLowerCase().contains(searchText.toLowerCase()) ||
+            product.getDescription().toLowerCase().contains(searchText.toLowerCase())){
+                matchedProducts.add(product);
+            }
+        }
+        return matchedProducts;
+    }
+
+    @Override
+    public Product createProduct(Product product) {
+        FakeStoreRequestDTO dto = new FakeStoreRequestDTO();
+        dto.setTitle(product.getName());
+        dto.setDescription(product.getDescription());
+        dto.setPrice(product.getPrice()* 1.0);
+        dto.setImage(product.getImageUrl());
+        dto.setCategory(product.getCategory().getName());
+        return createProduct(dto);
+    }
+
+    @Override
+    public Product createProduct(FakeStoreRequestDTO fakeStoreRequestDTO) { //fakeStoreRequestDTO is our input from postman.
+        FakeStorePOSTResponseDTO savedProductResponse = restTemplate.postForObject(
+                "https://fakestoreapi.com/products",
+                 fakeStoreRequestDTO,
+                FakeStorePOSTResponseDTO.class);
+        Product product = savedProductResponse.toProduct();
+        return product;
+    }
+    //Now, the ProductService have actual methods. It doesnot contain 'convert this to that'.
+    //And, it's the object responsibility to convert itself.(FakeStoreResponseDTO obj. FakeStorePOSTResponseDTO obj.)
+
+}
